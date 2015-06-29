@@ -1,7 +1,0 @@
-{
-    "repos": "https://github.com/jiexuangao/rosetta.git",
-    "version": "1.0.1",
-    "tag": "1.0.1",
-    "main": "Rosetta.js",
-    "name": "rosetta"
-}

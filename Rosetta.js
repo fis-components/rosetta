@@ -40,717 +40,386 @@
                     }
                 };
             window.Rosetta = Rosetta;
-            ready(Rosetta.init);
+            ready(Rosetta.render);
         },
         {
-            './lib/rosetta.js': 19,
-            './lib/shims.js': 20
+            './lib/rosetta.js': 6,
+            './lib/shims.js': 7
         }
     ],
     2: [
         function (require, module, exports) {
             var h = require('./virtual-dom/h'), diff = require('./virtual-dom/diff'), patch = require('./virtual-dom/patch'), createElement = require('./virtual-dom/create-element');
-            var utils = require('./utils.js'), bind = utils.bind, fire = utils.fire, isDomNode = utils.isDomNode, lifeEvents = require('./lifeEvents.js'), ATTACHED = lifeEvents.ATTACHED, DETACHED = lifeEvents.DETACHED, CREATED = lifeEvents.CREATED;
+            var utils = require('./utils.js'), bind = utils.bind, fire = utils.fire, isDomNode = utils.isDomNode, updateRefs = utils.updateRefs, triggerChildren = utils.triggerChildren, lifeEvents = require('./lifeEvents.js'), ATTACHED = lifeEvents.ATTACHED, DETACHED = lifeEvents.DETACHED, CREATED = lifeEvents.CREATED;
             ATTRIBUTECHANGE = lifeEvents.ATTRIBUTECHANGE;
             var supportEvent = require('./supportEvent.js'), utils = require('./utils.js'), isString = utils.isString;
+            /**
+ * @function for event binding
+ * @param {string} type - the name of the event
+ * @param {string} listener - callback of the event
+ * @param {object} context - the custom context when executing callback
+ * @param {string} ifOnce - whether the callback will be executed once
+ */
             function on(type, listener, context, ifOnce) {
                 bind.call(this, type, listener, context, ifOnce);
             }
+            /**
+ * @function for event triggering
+ * @param {string} type - the name of the event
+ */
             function trigger(type) {
                 fire.call(this, type);
             }
+            /**
+ * @function for event unbinding
+ * @param {string} type - the name of the event to be unbinded
+ */
             function off(type) {
                 if (!type) {
                     this.events = [];
                 }
                 delete this.events[type];
             }
+            /**
+ * @function for event triggering only once
+ * @param {string} type - the name of the event
+ * @param {function} listener - callback of the event
+ * @param {object} context - the custom context when executing callback
+ */
             function once(type, listener, context) {
                 this.on(type, listener, context, true);
             }
+            /**
+ *
+ * @function for update rosetta element instance properties and rerendering UI
+ * @param {object} options - new value of properties for updating
+ */
             function update(options) {
-                var oldTree = this.vTree, root = this.root, type = this.type, attr = {};
-                attr = extend(this.attrs, options, true);
-                var newTree = this.__t(this, attr, this.refs);
+                var oldTree = this.rTree, root = this.root, type = this.type, attr = {};
+                attr = extend(this.__config, options, true);
+                extend(this, attr, true);
+                var newTree = this.__t(this, this.$);
                 var patches = diff(oldTree, newTree);
                 this.root = patch(this.root, patches);
-                this.vTree = newTree;
-                this.attrs = attr;
-                Rosetta.updateRefs(this, this.root);
-                Rosetta.triggerChildren(this, ATTRIBUTECHANGE);
-                this.trigger(ATTRIBUTECHANGE, this);
+                this.rTree = newTree;
+                updateRefs(this, this.root);
+                this.attributeChanged.call(this);
+                triggerChildren(this, ATTRIBUTECHANGE);
+                this.fire(ATTRIBUTECHANGE, this);
             }
+            /**
+ *
+ * @function for destroy rosetta element instance
+ *
+ */
             function destroy() {
                 this.off();
                 this.root.parentElement.removeChild(this.root);
-                Rosetta.triggerChildren(this, DETACHED);
-                this.trigger(DETACHED, this);
-                delete ref(this.name);
+                this.dettached.call(this);
+                this.isAttached = false;
+                triggerChildren(this, DETACHED);
+                this.fire(DETACHED, this);
+                delete Rosetta.ref(this.name);
             }
+            /**
+ *
+ * @function for creating child rosetta element instance
+ * @param {string} type - type of custom lement to be created
+ * @attr {object} attr - initial value of properties to be set to rosetta element instance
+ */
             function create(type, attr) {
                 var obj = Rosetta.create.apply(Rosetta, arguments);
                 // to update refs, something wrong here
+                var rTree = obj;
+                //obj.rTree;
                 if (!!attr && !!attr.ref) {
-                    this.refs[attr.ref] = obj;
+                    this.$[attr.ref] = rTree;
                 }
-                if (obj.realObj && obj.realObj.isRosettaElem == true) {
+                if (rTree && rTree.realObj && rTree.realObj.isRosettaElem == true) {
                     this.rosettaElems = this.rosettaElems || [];
-                    this.rosettaElems.push(obj.realObj);
+                    this.rosettaElems.push(rTree.realObj);
                 }
                 return obj;
             }
-            function createElementClass(type, renderFunc) {
+            /**
+ *
+ * @function for creating new rosetta element class
+ * @param {string} type - new type of rosetta element class
+ * @protoOptions {object} protoOptions - new settings for prototype of rosetta element
+ *
+ */
+            function createElementClass(protoOptions) {
+                var type = protoOptions.is;
                 /**
      * constructor for new custom elements
      *
      * @class CustomElement
      * @constructor
+     * @param {object} options - the custom options of the new element
      */
                 function CustomElement(options) {
                     extend(this, {
                         type: type,
-                        name: name,
-                        renderFunc: renderFunc,
-                        refs: {},
+                        name: '',
+                        '$': {},
                         events: {},
-                        isAttached: false,
-                        attrs: {}
+                        isAttached: false
                     }, options || {}, true);
                 }
-                CustomElement.prototype = {
+                extend(CustomElement.prototype, {
+                    ready: function () {
+                    },
+                    created: function () {
+                    },
+                    attached: function () {
+                    },
+                    dettached: function () {
+                    },
+                    attributeChanged: function () {
+                    },
+                    properties: {},
+                    is: '',
+                    __t: function () {
+                    },
+                    __config: {},
+                    eventDelegator: {}
+                }, protoOptions, {
                     update: update,
                     destroy: destroy,
                     isRosettaElem: true,
                     on: on,
-                    trigger: trigger,
-                    off: off,
                     once: once,
-                    create: create,
-                    __t: function () {
+                    off: off,
+                    fire: trigger,
+                    create: create
+                }, true);
+                for (var key in protoOptions.properties) {
+                    var value = protoOptions.properties[key];
+                    var re = value.value;
+                    if (re == undefined) {
+                        re = new value();
                     }
-                };
+                    CustomElement.prototype.__config[key] = re;
+                    CustomElement.prototype[key] = re;
+                }
                 return CustomElement;
             }
             module.exports = createElementClass;
         },
         {
-            './lifeEvents.js': 17,
-            './supportEvent.js': 21,
-            './utils.js': 22,
-            './virtual-dom/create-element': 23,
-            './virtual-dom/diff': 24,
-            './virtual-dom/h': 25,
-            './virtual-dom/patch': 33
+            './lifeEvents.js': 4,
+            './supportEvent.js': 8,
+            './utils.js': 9,
+            './virtual-dom/create-element': 10,
+            './virtual-dom/diff': 11,
+            './virtual-dom/h': 12,
+            './virtual-dom/patch': 20
         }
     ],
     3: [
         function (require, module, exports) {
-            var EvStore = require('ev-store');
-            module.exports = addEvent;
-            function addEvent(target, type, handler) {
-                var events = EvStore(target);
-                var event = events[type];
-                if (!event) {
-                    events[type] = handler;
-                } else if (Array.isArray(event)) {
-                    if (event.indexOf(handler) === -1) {
-                        event.push(handler);
-                    }
-                } else if (event !== handler) {
-                    events[type] = [
-                        event,
-                        handler
-                    ];
-                }
+            /**
+ *
+ *  file: loader.js
+ *  version: 1.0.0
+ *  update: 2015.7.20
+ *
+ */
+            var head = document.getElementsByTagName('head')[0], resMap = {}, pkgMap = {}, factoryMap = {}, loadingMap = {}, scriptsMap = {}, timeout = 5000;
+            /**
+ *
+ *
+ *  example:
+ *
+    Rosetta.resourceMap({
+        res: {
+            'https://ss1.bdstatic.com/5eN1bjq8AAUYm2zgoY3K/r/www/cache/static/protocol/https/jquery/jquery-1.10.2.min_f2fb5194': {
+                type: 'js',
+                url: 'https://ss1.bdstatic.com/5eN1bjq8AAUYm2zgoY3K/r/www/cache/static/protocol/https/jquery/jquery-1.10.2.min_f2fb5194.js' //,
+                //pkg: 'merge1'
+                //,
+                //deps: ['comp/a-xxx', 'comp/a-yyy', 'comp/a-rrrr', 'a-slider.css']
+            },
+
+            'a-slider.css': {
+                type: 'css',
+                url: 'a-slider_xxxxxx.css',
+                pkg: 'merge2'
             }
         },
-        { 'ev-store': 7 }
+
+        pkg: {
+            'merge1': {
+                type: 'js',
+                url: 'merge1_sds2121.js'
+            },
+
+            'merge2': {
+                type: 'css',
+                url: 'merge1_sds2121.css'
+            }
+        }
+    })
+ *
+ */
+            function resourceMap(obj) {
+                var key = '', res = '', pkg = '';
+                res = obj.res;
+                for (key in res) {
+                    resMap[key] = res[key];
+                }
+                pkg = obj.pkg;
+                for (key in pkg) {
+                    pkgMap[key] = pkg[key];
+                }
+            }
+            function alias(url) {
+                return url.replace(/\.js$/i, '');
+            }
+            function createScript(url, id, onerror) {
+                if (url in scriptsMap)
+                    return;
+                scriptsMap[url] = true;
+                var script = document.createElement('script');
+                if (onerror) {
+                    var tid = setTimeout(onerror, timeout);
+                    script.onerror = function () {
+                        clearTimeout(tid);
+                        onerror();
+                    };
+                    function onload() {
+                        clearTimeout(tid);
+                        var queue = loadingMap[alias(id)];
+                        if (queue) {
+                            for (var i = 0, n = queue.length; i < n; i++) {
+                                queue[i]();
+                            }
+                            delete loadingMap[url];
+                        }
+                    }
+                    if ('onload' in script) {
+                        script.onload = onload;
+                    } else {
+                        script.onreadystatechange = function () {
+                            if (this.readyState == 'loaded' || this.readyState == 'complete') {
+                                onload();
+                            }
+                        };
+                    }
+                }
+                script.type = 'text/javascript';
+                script.src = url;
+                head.appendChild(script);
+                return script;
+            }
+            function createCSS(url, id, onerror) {
+                if (url in scriptsMap)
+                    return;
+                scriptsMap[url] = true;
+                var link = document.createElement('link');
+                if (onerror) {
+                    var tid = setTimeout(onerror, timeout);
+                    function onload() {
+                        clearTimeout(tid);
+                        var queue = loadingMap[alias(id)];
+                        if (queue) {
+                            for (var i = 0, n = queue.length; i < n; i++) {
+                                queue[i]();
+                            }
+                            delete loadingMap[url];
+                        }
+                    }
+                    var link = document.createElement('link');
+                    link.href = url;
+                    link.rel = 'stylesheet';
+                    link.type = 'text/css';
+                    head.appendChild(link);
+                    onload();
+                }
+            }
+            /**
+ *
+ * @module htmlImport
+ * @param {array} urls -
+ *
+ */
+            function htmlImport(urls, onload, onerror) {
+                if (typeof urls == 'string') {
+                    urls = [urls];
+                }
+                var needMap = {};
+                var needNum = 0;
+                onerror = onerror || function () {
+                };
+                function findNeed(depArr) {
+                    for (var i = 0, n = depArr.length; i < n; i++) {
+                        var dep = alias(depArr[i]);
+                        if (!(dep in factoryMap)) {
+                            var child = resMap[dep] || resMap[dep + '.js'];
+                            if (child && 'deps' in child) {
+                                findNeed(child.deps);
+                            }
+                        }
+                        if (dep in needMap) {
+                            continue;
+                        }
+                        needMap[dep] = true;
+                        needNum++;
+                        loadScript(dep, updateNeed, onerror);
+                    }
+                }
+                function updateNeed() {
+                    if (0 == needNum--) {
+                        onload && onload.apply(window);
+                    }
+                }
+                findNeed(urls);
+                updateNeed();
+            }
+            function loadScript(id, callback, onerror) {
+                var queue = loadingMap[id] || (loadingMap[id] = []);
+                queue.push(callback);
+                //
+                // resource map query
+                //
+                var res = resMap[id] || resMap[id + '.js'] || {};
+                var pkg = res.pkg;
+                var url;
+                var type = '';
+                if (pkg) {
+                    url = pkgMap[pkg].url;
+                    type = pkgMap[pkg].type;
+                } else {
+                    url = res.url || id;
+                    type = res.type;
+                }
+                if (type == 'js') {
+                    createScript(url, id, onerror && function () {
+                        onerror(id);
+                    });
+                } else if (type == 'css') {
+                    createCSS(url, id, onerror && function () {
+                        onerror(id);
+                    });
+                }
+            }
+            htmlImport.factoryMap = factoryMap;
+            htmlImport.resourceMap = resourceMap;
+            module.exports = htmlImport;
+        },
+        {}
     ],
     4: [
-        function (require, module, exports) {
-            var globalDocument = require('global/document');
-            var EvStore = require('ev-store');
-            var createStore = require('weakmap-shim/create-store');
-            var addEvent = require('./add-event.js');
-            var removeEvent = require('./remove-event.js');
-            var ProxyEvent = require('./proxy-event.js');
-            var HANDLER_STORE = createStore();
-            module.exports = DOMDelegator;
-            function DOMDelegator(document) {
-                if (!(this instanceof DOMDelegator)) {
-                    return new DOMDelegator(document);
-                }
-                document = document || globalDocument;
-                this.target = document.documentElement;
-                this.events = {};
-                this.rawEventListeners = {};
-                this.globalListeners = {};
-            }
-            DOMDelegator.prototype.addEventListener = addEvent;
-            DOMDelegator.prototype.removeEventListener = removeEvent;
-            DOMDelegator.allocateHandle = function allocateHandle(func) {
-                var handle = new Handle();
-                HANDLER_STORE(handle).func = func;
-                return handle;
-            };
-            DOMDelegator.transformHandle = function transformHandle(handle, broadcast) {
-                var func = HANDLER_STORE(handle).func;
-                return this.allocateHandle(function (ev) {
-                    broadcast(ev, func);
-                });
-            };
-            DOMDelegator.prototype.addGlobalEventListener = function addGlobalEventListener(eventName, fn) {
-                var listeners = this.globalListeners[eventName] || [];
-                if (listeners.indexOf(fn) === -1) {
-                    listeners.push(fn);
-                }
-                this.globalListeners[eventName] = listeners;
-            };
-            DOMDelegator.prototype.removeGlobalEventListener = function removeGlobalEventListener(eventName, fn) {
-                var listeners = this.globalListeners[eventName] || [];
-                var index = listeners.indexOf(fn);
-                if (index !== -1) {
-                    listeners.splice(index, 1);
-                }
-            };
-            DOMDelegator.prototype.listenTo = function listenTo(eventName) {
-                if (!(eventName in this.events)) {
-                    this.events[eventName] = 0;
-                }
-                this.events[eventName]++;
-                if (this.events[eventName] !== 1) {
-                    return;
-                }
-                var listener = this.rawEventListeners[eventName];
-                if (!listener) {
-                    listener = this.rawEventListeners[eventName] = createHandler(eventName, this);
-                }
-                if (this.target.addEventListener) {
-                    this.target.addEventListener(eventName, listener, true);
-                } else {
-                    this.target.attachEvent('on' + eventName, listener);
-                }
-            };
-            DOMDelegator.prototype.unlistenTo = function unlistenTo(eventName) {
-                if (!(eventName in this.events)) {
-                    this.events[eventName] = 0;
-                }
-                if (this.events[eventName] === 0) {
-                    throw new Error('already unlistened to event.');
-                }
-                this.events[eventName]--;
-                if (this.events[eventName] !== 0) {
-                    return;
-                }
-                var listener = this.rawEventListeners[eventName];
-                if (!listener) {
-                    throw new Error('dom-delegator#unlistenTo: cannot ' + 'unlisten to ' + eventName);
-                }
-                if (this.target.removeEventListener) {
-                    this.target.removeEventListener(eventName, listener, true);
-                } else {
-                    this.target.dettachEvent(eventName, listener);
-                }
-            };
-            function createHandler(eventName, delegator) {
-                var globalListeners = delegator.globalListeners;
-                var delegatorTarget = delegator.target;
-                return handler;
-                function handler(ev) {
-                    var globalHandlers = globalListeners[eventName] || [];
-                    if (globalHandlers.length > 0) {
-                        var globalEvent = new ProxyEvent(ev);
-                        globalEvent.currentTarget = delegatorTarget;
-                        callListeners(globalHandlers, globalEvent);
-                    }
-                    findAndInvokeListeners(ev.target, ev, eventName);
-                }
-            }
-            function findAndInvokeListeners(elem, ev, eventName) {
-                var listener = getListener(elem, eventName);
-                if (listener && listener.handlers.length > 0) {
-                    var listenerEvent = new ProxyEvent(ev);
-                    listenerEvent.currentTarget = listener.currentTarget;
-                    callListeners(listener.handlers, listenerEvent);
-                    if (listenerEvent._bubbles) {
-                        var nextTarget = listener.currentTarget.parentNode;
-                        findAndInvokeListeners(nextTarget, ev, eventName);
-                    }
-                }
-            }
-            function getListener(target, type) {
-                // terminate recursion if parent is `null`
-                if (target === null || typeof target === 'undefined') {
-                    return null;
-                }
-                var events = EvStore(target);
-                // fetch list of handler fns for this event
-                var handler = events[type];
-                var allHandler = events.event;
-                if (!handler && !allHandler) {
-                    return getListener(target.parentNode, type);
-                }
-                var handlers = [].concat(handler || [], allHandler || []);
-                return new Listener(target, handlers);
-            }
-            function callListeners(handlers, ev) {
-                handlers.forEach(function (handler) {
-                    if (typeof handler === 'function') {
-                        handler(ev);
-                    } else if (typeof handler.handleEvent === 'function') {
-                        handler.handleEvent(ev);
-                    } else if (handler.type === 'dom-delegator-handle') {
-                        HANDLER_STORE(handler).func(ev);
-                    } else {
-                        throw new Error('dom-delegator: unknown handler ' + 'found: ' + JSON.stringify(handlers));
-                    }
-                });
-            }
-            function Listener(target, handlers) {
-                this.currentTarget = target;
-                this.handlers = handlers;
-            }
-            function Handle() {
-                this.type = 'dom-delegator-handle';
-            }
-        },
-        {
-            './add-event.js': 3,
-            './proxy-event.js': 15,
-            './remove-event.js': 16,
-            'ev-store': 7,
-            'global/document': 10,
-            'weakmap-shim/create-store': 13
-        }
-    ],
-    5: [
-        function (require, module, exports) {
-            var Individual = require('individual');
-            var cuid = require('cuid');
-            var globalDocument = require('global/document');
-            var DOMDelegator = require('./dom-delegator.js');
-            var versionKey = '13';
-            var cacheKey = '__DOM_DELEGATOR_CACHE@' + versionKey;
-            var cacheTokenKey = '__DOM_DELEGATOR_CACHE_TOKEN@' + versionKey;
-            var delegatorCache = Individual(cacheKey, { delegators: {} });
-            var commonEvents = [
-                'blur',
-                'change',
-                'click',
-                'contextmenu',
-                'dblclick',
-                'error',
-                'focus',
-                'focusin',
-                'focusout',
-                'input',
-                'keydown',
-                'keypress',
-                'keyup',
-                'load',
-                'mousedown',
-                'mouseup',
-                'resize',
-                'select',
-                'submit',
-                'touchcancel',
-                'touchend',
-                'touchstart',
-                'unload'
-            ];
-            /*  Delegator is a thin wrapper around a singleton `DOMDelegator`
-        instance.
-
-    Only one DOMDelegator should exist because we do not want
-        duplicate event listeners bound to the DOM.
-
-    `Delegator` will also `listenTo()` all events unless
-        every caller opts out of it
-*/
-            module.exports = Delegator;
-            function Delegator(opts) {
-                opts = opts || {};
-                var document = opts.document || globalDocument;
-                var cacheKey = document[cacheTokenKey];
-                if (!cacheKey) {
-                    cacheKey = document[cacheTokenKey] = cuid();
-                }
-                var delegator = delegatorCache.delegators[cacheKey];
-                if (!delegator) {
-                    delegator = delegatorCache.delegators[cacheKey] = new DOMDelegator(document);
-                }
-                if (opts.defaultEvents !== false) {
-                    for (var i = 0; i < commonEvents.length; i++) {
-                        delegator.listenTo(commonEvents[i]);
-                    }
-                }
-                return delegator;
-            }
-            Delegator.allocateHandle = DOMDelegator.allocateHandle;
-            Delegator.transformHandle = DOMDelegator.transformHandle;
-        },
-        {
-            './dom-delegator.js': 4,
-            'cuid': 6,
-            'global/document': 10,
-            'individual': 11
-        }
-    ],
-    6: [
-        function (require, module, exports) {
-            /**
- * cuid.js
- * Collision-resistant UID generator for browsers and node.
- * Sequential for fast db lookups and recency sorting.
- * Safe for element IDs and server-side lookups.
- *
- * Extracted from CLCTR
- * 
- * Copyright (c) Eric Elliott 2012
- * MIT License
- */
-            /*global window, navigator, document, require, process, module */
-            (function (app) {
-                'use strict';
-                var namespace = 'cuid', c = 0, blockSize = 4, base = 36, discreteValues = Math.pow(base, blockSize), pad = function pad(num, size) {
-                        var s = '000000000' + num;
-                        return s.substr(s.length - size);
-                    }, randomBlock = function randomBlock() {
-                        return pad((Math.random() * discreteValues << 0).toString(base), blockSize);
-                    }, safeCounter = function () {
-                        c = c < discreteValues ? c : 0;
-                        c++;
-                        // this is not subliminal
-                        return c - 1;
-                    }, api = function cuid() {
-                        // Starting with a lowercase letter makes
-                        // it HTML element ID friendly.
-                        var letter = 'c',
-                            // hard-coded allows for sequential access
-                            // timestamp
-                            // warning: this exposes the exact date and time
-                            // that the uid was created.
-                            timestamp = new Date().getTime().toString(base),
-                            // Prevent same-machine collisions.
-                            counter,
-                            // A few chars to generate distinct ids for different
-                            // clients (so different computers are far less
-                            // likely to generate the same id)
-                            fingerprint = api.fingerprint(),
-                            // Grab some more chars from Math.random()
-                            random = randomBlock() + randomBlock();
-                        counter = pad(safeCounter().toString(base), blockSize);
-                        return letter + timestamp + counter + fingerprint + random;
-                    };
-                api.slug = function slug() {
-                    var date = new Date().getTime().toString(36), counter, print = api.fingerprint().slice(0, 1) + api.fingerprint().slice(-1), random = randomBlock().slice(-2);
-                    counter = safeCounter().toString(36).slice(-4);
-                    return date.slice(-2) + counter + print + random;
-                };
-                api.globalCount = function globalCount() {
-                    // We want to cache the results of this
-                    var cache = function calc() {
-                        var i, count = 0;
-                        for (i in window) {
-                            count++;
-                        }
-                        return count;
-                    }();
-                    api.globalCount = function () {
-                        return cache;
-                    };
-                    return cache;
-                };
-                api.fingerprint = function browserPrint() {
-                    return pad((navigator.mimeTypes.length + navigator.userAgent.length).toString(36) + api.globalCount().toString(36), 4);
-                };
-                // don't change anything from here down.
-                if (app.register) {
-                    app.register(namespace, api);
-                } else if (typeof module !== 'undefined') {
-                    module.exports = api;
-                } else {
-                    app[namespace] = api;
-                }
-            }(this.applitude || this));
-        },
-        {}
-    ],
-    7: [
-        function (require, module, exports) {
-            'use strict';
-            var OneVersionConstraint = require('individual/one-version');
-            var MY_VERSION = '7';
-            OneVersionConstraint('ev-store', MY_VERSION);
-            var hashKey = '__EV_STORE_KEY@' + MY_VERSION;
-            module.exports = EvStore;
-            function EvStore(elem) {
-                var hash = elem[hashKey];
-                if (!hash) {
-                    hash = elem[hashKey] = {};
-                }
-                return hash;
-            }
-        },
-        { 'individual/one-version': 9 }
-    ],
-    8: [
-        function (require, module, exports) {
-            (function (global) {
-                'use strict';
-                /*global window, global*/
-                var root = typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : {};
-                module.exports = Individual;
-                function Individual(key, value) {
-                    if (key in root) {
-                        return root[key];
-                    }
-                    root[key] = value;
-                    return value;
-                }
-            }.call(this, typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : typeof window !== 'undefined' ? window : {}));
-        },
-        {}
-    ],
-    9: [
-        function (require, module, exports) {
-            'use strict';
-            var Individual = require('./index.js');
-            module.exports = OneVersion;
-            function OneVersion(moduleName, version, defaultValue) {
-                var key = '__INDIVIDUAL_ONE_VERSION_' + moduleName;
-                var enforceKey = key + '_ENFORCE_SINGLETON';
-                var versionValue = Individual(enforceKey, version);
-                if (versionValue !== version) {
-                    throw new Error('Can only have one copy of ' + moduleName + '.\n' + 'You already have version ' + versionValue + ' installed.\n' + 'This means you cannot install version ' + version);
-                }
-                return Individual(key, defaultValue);
-            }
-        },
-        { './index.js': 8 }
-    ],
-    10: [
-        function (require, module, exports) {
-            (function (global) {
-                var topLevel = typeof global !== 'undefined' ? global : typeof window !== 'undefined' ? window : {};
-                var minDoc = require('min-document');
-                if (typeof document !== 'undefined') {
-                    module.exports = document;
-                } else {
-                    var doccy = topLevel['__GLOBAL_DOCUMENT_CACHE@4'];
-                    if (!doccy) {
-                        doccy = topLevel['__GLOBAL_DOCUMENT_CACHE@4'] = minDoc;
-                    }
-                    module.exports = doccy;
-                }
-            }.call(this, typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : typeof window !== 'undefined' ? window : {}));
-        },
-        { 'min-document': 56 }
-    ],
-    11: [
-        function (require, module, exports) {
-            (function (global) {
-                var root = typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : {};
-                module.exports = Individual;
-                function Individual(key, value) {
-                    if (root[key]) {
-                        return root[key];
-                    }
-                    Object.defineProperty(root, key, {
-                        value: value,
-                        configurable: true
-                    });
-                    return value;
-                }
-            }.call(this, typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : typeof window !== 'undefined' ? window : {}));
-        },
-        {}
-    ],
-    12: [
-        function (require, module, exports) {
-            if (typeof Object.create === 'function') {
-                // implementation from standard node.js 'util' module
-                module.exports = function inherits(ctor, superCtor) {
-                    ctor.super_ = superCtor;
-                    ctor.prototype = Object.create(superCtor.prototype, {
-                        constructor: {
-                            value: ctor,
-                            enumerable: false,
-                            writable: true,
-                            configurable: true
-                        }
-                    });
-                };
-            } else {
-                // old school shim for old browsers
-                module.exports = function inherits(ctor, superCtor) {
-                    ctor.super_ = superCtor;
-                    var TempCtor = function () {
-                    };
-                    TempCtor.prototype = superCtor.prototype;
-                    ctor.prototype = new TempCtor();
-                    ctor.prototype.constructor = ctor;
-                };
-            }
-        },
-        {}
-    ],
-    13: [
-        function (require, module, exports) {
-            var hiddenStore = require('./hidden-store.js');
-            module.exports = createStore;
-            function createStore() {
-                var key = {};
-                return function (obj) {
-                    if ((typeof obj !== 'object' || obj === null) && typeof obj !== 'function') {
-                        throw new Error('Weakmap-shim: Key must be object');
-                    }
-                    var store = obj.valueOf(key);
-                    return store && store.identity === key ? store : hiddenStore(obj, key);
-                };
-            }
-        },
-        { './hidden-store.js': 14 }
-    ],
-    14: [
-        function (require, module, exports) {
-            module.exports = hiddenStore;
-            function hiddenStore(obj, key) {
-                var store = { identity: key };
-                var valueOf = obj.valueOf;
-                Object.defineProperty(obj, 'valueOf', {
-                    value: function (value) {
-                        return value !== key ? valueOf.apply(this, arguments) : store;
-                    },
-                    writable: true
-                });
-                return store;
-            }
-        },
-        {}
-    ],
-    15: [
-        function (require, module, exports) {
-            var inherits = require('inherits');
-            var ALL_PROPS = [
-                'altKey',
-                'bubbles',
-                'cancelable',
-                'ctrlKey',
-                'eventPhase',
-                'metaKey',
-                'relatedTarget',
-                'shiftKey',
-                'target',
-                'timeStamp',
-                'type',
-                'view',
-                'which'
-            ];
-            var KEY_PROPS = [
-                'char',
-                'charCode',
-                'key',
-                'keyCode'
-            ];
-            var MOUSE_PROPS = [
-                'button',
-                'buttons',
-                'clientX',
-                'clientY',
-                'layerX',
-                'layerY',
-                'offsetX',
-                'offsetY',
-                'pageX',
-                'pageY',
-                'screenX',
-                'screenY',
-                'toElement'
-            ];
-            var rkeyEvent = /^key|input/;
-            var rmouseEvent = /^(?:mouse|pointer|contextmenu)|click/;
-            module.exports = ProxyEvent;
-            function ProxyEvent(ev) {
-                if (!(this instanceof ProxyEvent)) {
-                    return new ProxyEvent(ev);
-                }
-                if (rkeyEvent.test(ev.type)) {
-                    return new KeyEvent(ev);
-                } else if (rmouseEvent.test(ev.type)) {
-                    return new MouseEvent(ev);
-                }
-                for (var i = 0; i < ALL_PROPS.length; i++) {
-                    var propKey = ALL_PROPS[i];
-                    this[propKey] = ev[propKey];
-                }
-                this._rawEvent = ev;
-                this._bubbles = false;
-            }
-            ProxyEvent.prototype.preventDefault = function () {
-                this._rawEvent.preventDefault();
-            };
-            ProxyEvent.prototype.startPropagation = function () {
-                this._bubbles = true;
-            };
-            function MouseEvent(ev) {
-                for (var i = 0; i < ALL_PROPS.length; i++) {
-                    var propKey = ALL_PROPS[i];
-                    this[propKey] = ev[propKey];
-                }
-                for (var j = 0; j < MOUSE_PROPS.length; j++) {
-                    var mousePropKey = MOUSE_PROPS[j];
-                    this[mousePropKey] = ev[mousePropKey];
-                }
-                this._rawEvent = ev;
-            }
-            inherits(MouseEvent, ProxyEvent);
-            function KeyEvent(ev) {
-                for (var i = 0; i < ALL_PROPS.length; i++) {
-                    var propKey = ALL_PROPS[i];
-                    this[propKey] = ev[propKey];
-                }
-                for (var j = 0; j < KEY_PROPS.length; j++) {
-                    var keyPropKey = KEY_PROPS[j];
-                    this[keyPropKey] = ev[keyPropKey];
-                }
-                this._rawEvent = ev;
-            }
-            inherits(KeyEvent, ProxyEvent);
-        },
-        { 'inherits': 12 }
-    ],
-    16: [
-        function (require, module, exports) {
-            var EvStore = require('ev-store');
-            module.exports = removeEvent;
-            function removeEvent(target, type, handler) {
-                var events = EvStore(target);
-                var event = events[type];
-                if (!event) {
-                    return;
-                } else if (Array.isArray(event)) {
-                    var index = event.indexOf(handler);
-                    if (index !== -1) {
-                        event.splice(index, 1);
-                    }
-                } else if (event === handler) {
-                    events[type] = null;
-                }
-            }
-        },
-        { 'ev-store': 7 }
-    ],
-    17: [
         function (require, module, exports) {
             module.exports.ATTACHED = 'attached';
             module.exports.DETACHED = 'detached';
             module.exports.CREATED = 'created';
+            module.exports.READY = 'ready';
             module.exports.ATTRIBUTECHANGE = 'attributeChange';
         },
         {}
     ],
-    18: [
+    5: [
         function (require, module, exports) {
             var plainDom = {
                 content: 'content',
@@ -891,45 +560,74 @@
         },
         {}
     ],
-    19: [
+    6: [
         function (require, module, exports) {
             /*@require ./rosetta.css*/
-            /** Rosetta v1.0.1**/
+            /** Rosetta v1.0.2**/
             var _refers = {}, _elemClass = {}, _allRendered = false;
-            var supportEvent = require('./supportEvent.js'), utils = require('./utils.js'), isArray = utils.isArray, query = utils.query, toType = utils.toType, extend = utils.extend, toPlainArray = utils.toPlainArray, isOriginalTag = utils.isOriginalTag, isDomNode = utils.isDomNode, isString = utils.isString, isFunction = utils.isFunction, bind = utils.bind, fire = utils.fire, deserializeValue = utils.deserializeValue, typeHandlers = utils.typeHandlers, lifeEvents = require('./lifeEvents.js'), ATTACHED = lifeEvents.ATTACHED, DETACHED = lifeEvents.DETACHED, CREATED = lifeEvents.CREATED;
-            ATTRIBUTECHANGE = lifeEvents.ATTRIBUTECHANGE;
+            var supportEvent = require('./supportEvent.js'), utils = require('./utils.js'), isArray = utils.isArray, query = utils.query, toType = utils.toType, extend = utils.extend, toPlainArray = utils.toPlainArray, isOriginalTag = utils.isOriginalTag, isDomNode = utils.isDomNode, isString = utils.isString, isFunction = utils.isFunction, bind = utils.bind, fire = utils.fire, deserializeValue = utils.deserializeValue, typeHandlers = utils.typeHandlers, updateRefs = utils.updateRefs, triggerChildren = utils.triggerChildren, htmlImport = require('./htmlImport.js'), lifeEvents = require('./lifeEvents.js'), ATTACHED = lifeEvents.ATTACHED, DETACHED = lifeEvents.DETACHED, CREATED = lifeEvents.CREATED, READY = lifeEvents.READY, ATTRIBUTECHANGE = lifeEvents.ATTRIBUTECHANGE;
             var _shouldReplacedContent = [];
-            var h = require('./virtual-dom/h'), createElement = require('./virtual-dom/create-element');
-            var Delegator = require('./dom-delegator');
+            var h = require('./virtual-dom/h');
+            var createElement = require('./virtual-dom/create-element');
             var createElementClass = require('./createElementClass.js');
-            function attributeToAttrs(name, value) {
-                // try to match this attribute to a property (attributes are
-                // all lower-case, so this is case-insensitive search)
+            var eventDelegatorObj = {};
+            var EvStore = require('./virtual-dom/node_modules/ev-store');
+            /**
+ * @function attributeToProperty
+ * @param name
+ * @param value
+ */
+            function attributeToProperty(name, value) {
                 if (name) {
-                    // filter out 'mustached' values, these are to be
-                    // get original value
-                    var currentValue = this.attrs[name];
-                    if (typeof currentValue != typeof value) {
+                    var item = this.properties[name] || String;
+                    var supportType = [
+                        Boolean,
+                        Date,
+                        Number,
+                        String,
+                        Array,
+                        Object
+                    ];
+                    var index = supportType.indexOf(item);
+                    var typeFunc = supportType[index];
+                    var currentValue = this[name] || null;
+                    if (index < 0) {
+                        var typeFunc = item.type;
+                    }
+                    if (!(typeof typeFunc() == typeof value)) {
                         // deserialize Boolean or Number values from attribute
-                        value = deserializeValue(value, currentValue);
+                        value = deserializeValue(value, typeFunc, currentValue);
                     }
                     // only act if the value has changed
                     if (value !== currentValue) {
-                        // install new value (has side-effects)
-                        this.attrs[name] = value;
+                        this[name] = value;
+                        this.__config[name] = value;
                     }
+                    return value;
                 }
             }
-            function updateRefs(obj, dom) {
-                for (var key in obj.refs) {
-                    var node = query('[ref="' + key + '"]', dom);
-                    obj.refs[key] = node;
+            function getRealAttr(attr, toRealType) {
+                var eventObj = {};
+                for (var i in attr) {
+                    var item = attr[i];
+                    if (toRealType === true) {
+                        attr[i] = attributeToProperty.call(this, i, item);
+                    }
+                    if (supportEvent[i]) {
+                        eventObj['ev-' + supportEvent[i]] = item;
+                        delete attr[i];
+                        eventDelegatorObj[supportEvent[i]] = true;
+                    }
                 }
+                attr = attr || {};
+                return {
+                    eventObj: eventObj,
+                    attr: attr
+                };
             }
             function init() {
                 var elems = [];
                 _allRendered = false;
-                var delegator = Delegator();
                 if (!!document.getElementsByClassName) {
                     elems = document.getElementsByClassName('r-element');
                 } else if (!!document.querySelectorAll) {
@@ -952,7 +650,9 @@
                             var k = attrs[n];
                             options[k.name] = k.value;
                         }
-                        var obj = Rosetta.render(Rosetta.create(type, options, childrenArr), item, true);
+                        if (elemClass(type)) {
+                            var obj = Rosetta.render(Rosetta.create(type, options, childrenArr), item, true);
+                        }
                     }
                 }
                 _allRendered = true;
@@ -975,12 +675,6 @@
                     return _elemClass[type];
                 }
             }
-            function triggerChildren(obj, type) {
-                (obj.rosettaElems || []).map(function (item, index) {
-                    triggerChildren(item.rosettaElems || []);
-                    item.trigger(type, item);
-                });
-            }
             function appendRoot(dom, root, force) {
                 var classes = root.getAttribute('class');
                 if (force == true) {
@@ -991,23 +685,6 @@
                     root.appendChild(dom);
                     root.setAttribute('class', classes.replace(/r-invisible/g, ''));
                 }
-            }
-            function getRealAttr(attr, toRealType) {
-                var eventObj = {};
-                for (var i in attr) {
-                    var item = attr[i];
-                    if (toRealType === true) {
-                        attributeToAttrs.call(this, i, item);
-                    }
-                    if (supportEvent[i]) {
-                        eventObj['ev-' + supportEvent[i]] = item;
-                    }
-                }
-                attr = attr || {};
-                return {
-                    eventObj: eventObj,
-                    attr: attr
-                };
             }
             function getParent(dom) {
                 var parent = dom.parentElement;
@@ -1020,15 +697,47 @@
                     return getParent(parent);
                 }
             }
-            function render(vTree, root, force) {
+            function eventDelegate(root, eventDelegatorObj) {
+                var self = this;
+                for (var type in eventDelegatorObj) {
+                    (function (eventName) {
+                        root.addEventListener(eventName, function (e) {
+                            var parent = e.target;
+                            function findCB(parent) {
+                                if (parent == root || !parent) {
+                                    return;
+                                }
+                                var cb = EvStore(parent)[eventName];
+                                if (!!cb) {
+                                    cb.call(self, e);
+                                } else {
+                                    parent = parent.parentElement;
+                                    findCB(parent);
+                                }
+                            }
+                            findCB(parent);
+                        }, false);
+                    }(type));
+                }
+            }
+            /**
+ *
+ * @function to render
+ *
+ */
+            function render(rTree, root, force) {
+                if (!rTree) {
+                    init();
+                    return;
+                }
                 if (isString(root)) {
                     root = query(root)[0];
                 }
-                var obj = vTree.realObj;
-                if (!vTree || !root) {
+                var obj = rTree.realObj;
+                if (!rTree || !root) {
                     return;
                 }
-                var dom = createElement(vTree);
+                var dom = createElement(rTree);
                 if (obj && obj.isRosettaElem == true) {
                     obj.root = dom;
                     var contents = query('content', obj.root);
@@ -1057,21 +766,30 @@
                         }
                     });
                     updateRefs(obj, dom);
+                    obj.ready.call(this);
                     appendRoot(dom, root, force);
                     obj.isAttached = true;
-                    ref(obj.attrs.ref, obj);
+                    ref(obj.__config.ref, obj);
+                    eventDelegate.call(obj, dom, eventDelegatorObj);
+                    eventDelegatorObj = {};
+                    obj.attached.call(obj);
                     triggerChildren(obj, ATTACHED);
-                    obj.trigger(ATTACHED, obj);
+                    obj.fire(ATTACHED, obj);
                     return obj;
                 } else {
+                    eventDelegate.call(window, document, eventDelegatorObj);
+                    eventDelegatorObj = {};
                     appendRoot(dom, root, force);
                 }    // dom and children events delegation
             }
             /**
- * Returns vTree of newly created element instance
+ * Returns rTree of newly created element instance
  *
- * @method create
- * @return {Object} vTree
+ * @function create
+ * @param {string} type - type of element to be created
+ * @param {object} attr - attributes for initialize custom element instance
+ * @param {object} arguments[2...] - children of custom element instance
+ * @return {HTMLDOMElement}
  */
             function create(type, attr) {
                 if (!isString(type)) {
@@ -1080,26 +798,25 @@
                 attr = attr || {};
                 var childrenContent = [].slice.call(arguments, 2);
                 childrenContent = toPlainArray(childrenContent);
-                var vTree = '';
+                var rTree = '';
                 if (isOriginalTag(type)) {
                     var tmp = getRealAttr(attr);
                     var eventObj = tmp.eventObj;
                     attr = tmp.attr;
                     var newAttrs = extend({ attributes: attr }, eventObj, true);
-                    vTree = h.call(this, type, newAttrs, childrenContent);
-                    return vTree;
+                    rTree = h.call(this, type, newAttrs, childrenContent);
+                    return rTree;
                 } else {
                     var NewClass = elemClass(type), elemObj = null;
                     if (!NewClass) {
                         return;
                     }
                     elemObj = new NewClass();
-                    elemObj.renderFunc(elemObj);
                     elemObj.name = attr.ref ? attr.ref && ref(attr.ref, elemObj) : '';
-                    getRealAttr.call(elemObj, attr, true);
-                    elemObj.attrs = elemObj.attrs || attr;
-                    vTree = elemObj.__t(elemObj, elemObj.attrs, elemObj.refs);
-                    vTree.properties.attributes.isrosettaelem = true;
+                    var realAttr = getRealAttr.call(elemObj, attr, true);
+                    extend(elemObj, realAttr.attr);
+                    rTree = elemObj.__t(elemObj, elemObj.$);
+                    rTree.properties.attributes.isrosettaelem = true;
                     if (childrenContent) {
                         childrenContent.map(function (item, index) {
                             if (!item.nodeType) {
@@ -1107,19 +824,22 @@
                             }
                         });
                         _shouldReplacedContent.push(childrenContent);
-                        vTree.properties.attributes.shouldReplacedContent = _shouldReplacedContent.length - 1;
+                        rTree.properties.attributes.shouldReplacedContent = _shouldReplacedContent.length - 1;
                     }
-                    elemObj.vTree = vTree;
-                    elemObj.trigger(CREATED, elemObj);
-                    vTree.realObj = elemObj;
-                    return vTree;
+                    elemObj.rTree = rTree;
+                    elemObj.created.call(this);
+                    elemObj.fire(CREATED, elemObj);
+                    rTree.realObj = elemObj;
+                    // rTreeDom = createElement(rTree);
+                    // rTreeDom.rTree = rTree;
+                    return rTree;
                 }
             }
-            function register(type, renderFunc) {
-                var newClass = createElementClass(type, renderFunc);
-                elemClass(type, newClass);
-                return newClass;
-            }
+            /**
+ *
+ * @function
+ *
+ */
             function ready(cb) {
                 if (isFunction(cb)) {
                     if (_allRendered == true) {
@@ -1129,30 +849,65 @@
                     }
                 }
             }
-            var Rosetta = {
-                init: init,
-                ref: ref,
-                elemClass: elemClass,
-                render: render,
-                create: create,
-                register: register,
-                ready: ready,
-                triggerChildren: triggerChildren,
-                updateRefs: updateRefs
+            /**
+ *
+ * @param {json} options - options for prototype of custom element
+ * @example, if it has no default value, then the value can be String/Object/
+    {
+        is: 'r-xxx'
+        ready: function() {}
+        created: function() {}
+        attached: function() {}
+        dettached: function() {}
+        attributeChanged: function() {}
+        extends: 'type name'
+        properties: {
+            aaa: 'string',//used for deserializezing from an attribute
+            bbb: [],
+            prop: {
+                type: String,
+                notify: true,
+                readOnly: true
+            }
+        }
+    }
+ * @param options.properties.xxx.type - Boolean, Date, Number, String, Array or Object
+ * @param options.properties.xxx.value - boolean, number, string or function
+ * String. No serialization required.
+ * Date or Number. Serialized using  toString.
+ * Boolean. Results in a non-valued attribute to be either set (true) or removed (false).
+ * Array or Object. Serialized using JSON.stringify.
+ *
+ */
+            var Rosetta = function (options) {
+                var type = options.is;
+                var newClass = createElementClass(options);
+                elemClass(type, newClass);
+                htmlImport.factoryMap[options.__rid] = true;
+                return newClass;
             };
+            extend(Rosetta, {
+                'ref': ref,
+                'render': render,
+                'create': create,
+                'ready': ready,
+                'import': htmlImport,
+                'config': htmlImport.resourceMap
+            });
             module.exports = Rosetta;
         },
         {
             './createElementClass.js': 2,
-            './dom-delegator': 5,
-            './lifeEvents.js': 17,
-            './supportEvent.js': 21,
-            './utils.js': 22,
-            './virtual-dom/create-element': 23,
-            './virtual-dom/h': 25
+            './htmlImport.js': 3,
+            './lifeEvents.js': 4,
+            './supportEvent.js': 8,
+            './utils.js': 9,
+            './virtual-dom/create-element': 10,
+            './virtual-dom/h': 12,
+            './virtual-dom/node_modules/ev-store': 14
         }
     ],
-    20: [
+    7: [
         function (require, module, exports) {
             /*!
  * https://github.com/es-shims/es5-shim
@@ -1790,8 +1545,14 @@
         },
         {}
     ],
-    21: [
+    8: [
         function (require, module, exports) {
+            /**
+ * Module representing the supported events
+ * @module supportEvent
+ * @type {object}
+ * @exports supportEvent
+ */
             var supportEvent = {
                 // 只支持原生的
                 onClick: 'click',
@@ -1833,28 +1594,73 @@
         },
         {}
     ],
-    22: [
+    9: [
         function (require, module, exports) {
             function noopHandler(value) {
                 return value;
             }
-            var plainDom = require('./plainDom.js'), isString = module.exports.isString = function (elem) {
-                    return typeof elem == 'string';
-                }, isDomNode = module.exports.isDomNode = function (elem) {
-                    return !!(elem && elem.nodeType === 1);
-                }, isOriginalTag = module.exports.isOriginalTag = function (str) {
-                    return !!plainDom[str];
-                }, isWindow = module.exports.isWindow = function (obj) {
-                    return obj != null && obj == obj.window;
-                }, isPlainObject = module.exports.isPlainObject = function (obj) {
-                    return isObject(obj) && !isWindow(obj) && Object.getPrototypeOf(obj) == Object.prototype;
-                }, isArray = module.exports.isArray = function (value) {
-                    return value instanceof Array;
-                }, isObject = module.exports.isObject = function (value) {
-                    return typeof value == 'object';
-                }, isFunction = module.exports.isFunction = function (obj) {
-                    return typeof obj == 'function' || false;
-                };
+            var plainDom = require('./plainDom.js');
+            /**
+     *
+     * @module isString
+     * @param {object} elem
+     */
+            isString = module.exports.isString = function (elem) {
+                return typeof elem == 'string';
+            }, /**
+     *
+     * @module isDomNode
+     * @param {object} elem
+     */
+            isDomNode = module.exports.isDomNode = function (elem) {
+                return !!(elem && elem.nodeType === 1);
+            }, /**
+     *
+     * @module isOriginalTag
+     * @param {string} str
+     */
+            isOriginalTag = module.exports.isOriginalTag = function (str) {
+                return !!plainDom[str];
+            }, /**
+     *
+     * @module isWindow
+     * @param {object} obj
+     */
+            isWindow = module.exports.isWindow = function (obj) {
+                return obj != null && obj == obj.window;
+            }, /**
+     *
+     * @module isPlainObject
+     * @param {object} obj
+     */
+            isPlainObject = module.exports.isPlainObject = function (obj) {
+                return isObject(obj) && !isWindow(obj) && Object.getPrototypeOf(obj) == Object.prototype;
+            }, /**
+     *
+     * @module isArray
+     * @param {object} value
+     */
+            isArray = module.exports.isArray = function (value) {
+                return value instanceof Array;
+            }, /**
+     *
+     * @module isObject
+     * @param {object} value
+     */
+            isObject = module.exports.isObject = function (value) {
+                return typeof value == 'object';
+            }, /**
+     *
+     * @module isFunction
+     * @param {object} obj
+     */
+            isFunction = module.exports.isFunction = function (obj) {
+                return typeof obj == 'function' || false;
+            }, /**
+     *
+     * @module extend
+     * @param {object} target - the object which to append new json values
+     */
             extend = module.exports.extend = function (target) {
                 var end = [].slice.call(arguments, arguments.length - 2), deep = false, params = null;
                 target = target || {};
@@ -1880,15 +1686,23 @@
                     }
                 });
                 return target;
-            }, camelize = module.exports.camelize = function (key) {
+            }, /**
+     *
+     * @module camelize
+     * @param {string} key
+     */
+            camelize = module.exports.camelize = function (key) {
                 var _reg = /-(.)/g;
                 return key.replace(_reg, function (_, txt) {
                     return txt.toUpperCase();
                 });
-            }, toPlainArray = module.exports.toPlainArray = function (data, result) {
-                if (!result) {
-                    result = [];
-                }
+            }, /**
+     *
+     * @module toPlainArray
+     * @param {object} data - turn the data into plain array
+     */
+            toPlainArray = module.exports.toPlainArray = function (data) {
+                var result = [];
                 for (var i = 0; i < data.length; i++) {
                     var item = data[i];
                     if (isArray(item)) {
@@ -1898,13 +1712,27 @@
                     }
                 }
                 return result;
-            }, query = module.exports.query = function (selector, element) {
+            }, /**
+     *
+     * @module query
+     * @param {string} selector - the selector string for the wanted DOM
+     * @param {HTMLNode} element - the scope in which selector will be seached in
+     */
+            query = module.exports.query = function (selector, element) {
                 var found, maybeID = selector[0] == '#', maybeClass = !maybeID && selector[0] == '.', slice = [].slice, nameOnly = maybeID || maybeClass ? selector.slice(1) : selector, simpleSelectorRE = /^[\w-]*$/, isSimple = simpleSelectorRE.test(nameOnly);
                 if (!element) {
                     element = document;
                 }
                 return element.getElementById && isSimple && maybeID ? (found = element.getElementById(nameOnly)) ? [found] : [] : element.nodeType !== 1 && element.nodeType !== 9 && element.nodeType !== 11 ? [] : slice.call(isSimple && !maybeID && element.getElementsByClassName ? maybeClass ? element.getElementsByClassName(nameOnly) : element.getElementsByTagName(selector) : element.querySelectorAll(selector));
-            }, bind = module.exports.bind = function (type, listener, context, ifOnce) {
+            }, /**
+     *
+     * @module bind
+     * @param {string} type - the event name
+     * @param {function} listener - callback of the event which will be executed when the event has been triggered
+     * @param {object} context - the custom context when executing callback
+     * @param {boolean} ifOnce - determin whether the callback which be executed only once
+     */
+            bind = module.exports.bind = function (type, listener, context, ifOnce) {
                 this.events = this.events || {};
                 var queue = this.events[type] || (this.events[type] = []);
                 queue.push({
@@ -1912,7 +1740,12 @@
                     o: context,
                     ifOnce: ifOnce
                 });
-            }, fire = module.exports.fire = function (type) {
+            }, /**
+     *
+     * @module fire
+     * @param {string} type - trigger event which is represented by type
+     */
+            fire = module.exports.fire = function (type) {
                 this.events = this.events || {};
                 var slice = [].slice, list = this.events[type];
                 if (!list) {
@@ -1930,16 +1763,27 @@
                         j--;
                     }
                 }
-            }, deserializeValue = module.exports.deserializeValue = function (value, currentValue) {
+            }, /**
+     *
+     * @module deserializeValue
+     * @param {object} value - new value which will be deserialized according to the type of currentValue
+     * @param {object} currentValue - old value which to determin the type of the new value in the first param
+     */
+            deserializeValue = module.exports.deserializeValue = function (value, typeFunc, currentValue) {
                 // attempt to infer type from default value
-                var inferredType = typeof currentValue;
+                var inferredType = typeof typeFunc();
                 // invent 'date' type value for Date
-                if (currentValue instanceof Date) {
+                if (typeFunc == Date) {
                     inferredType = 'date';
                 }
                 // delegate deserialization via type string
                 return typeHandlers[inferredType](value, currentValue);
-            }, // helper for deserializing properties of various types to strings
+            }, /**
+     *
+     * @module typeHandlers
+     *
+     */
+            // helper for deserializing properties of various types to strings
             typeHandlers = module.exports.typeHandlers = {
                 string: noopHandler,
                 'undefined': noopHandler,
@@ -1980,32 +1824,54 @@
                 'function': function (value, currentValue) {
                     return currentValue;
                 }
+            }, /**
+     *
+     * @module updateRefs
+     * @param {object} obj - the rosetta element instance
+     * @param {HTMLNode} dom - the htmlnode of the rosetta element instance
+     */
+            updateRefs = module.exports.updateRefs = function (obj, dom) {
+                for (var key in obj.$) {
+                    var node = query('[ref="' + key + '"]', dom);
+                    obj.$[key] = node;
+                }
+            }, /**
+     *
+     * @function for triggering event on children
+     * @param {object} obj - rosetta element instance
+     * @param {string} type - event name
+     */
+            triggerChildren = module.exports.triggerChildren = function (obj, type) {
+                (obj.rosettaElems || []).map(function (item, index) {
+                    triggerChildren(item.rosettaElems || []);
+                    item.fire(type, item);
+                });
             };
         },
-        { './plainDom.js': 18 }
+        { './plainDom.js': 5 }
     ],
-    23: [
+    10: [
         function (require, module, exports) {
             var createElement = require('./vdom/create-element.js');
             module.exports = createElement;
         },
-        { './vdom/create-element.js': 35 }
+        { './vdom/create-element.js': 22 }
     ],
-    24: [
+    11: [
         function (require, module, exports) {
             var diff = require('./vtree/diff.js');
             module.exports = diff;
         },
-        { './vtree/diff.js': 55 }
+        { './vtree/diff.js': 42 }
     ],
-    25: [
+    12: [
         function (require, module, exports) {
             var h = require('./virtual-hyperscript/index.js');
             module.exports = h;
         },
-        { './virtual-hyperscript/index.js': 42 }
+        { './virtual-hyperscript/index.js': 29 }
     ],
-    26: [
+    13: [
         function (require, module, exports) {
             /*!
  * Cross-Browser Split 1.1.1
@@ -2110,40 +1976,78 @@
         },
         {}
     ],
-    27: [
+    14: [
         function (require, module, exports) {
-            arguments[4][7][0].apply(exports, arguments);
+            'use strict';
+            var OneVersionConstraint = require('individual/one-version');
+            var MY_VERSION = '7';
+            OneVersionConstraint('ev-store', MY_VERSION);
+            var hashKey = '__EV_STORE_KEY@' + MY_VERSION;
+            module.exports = EvStore;
+            function EvStore(elem) {
+                var hash = elem[hashKey];
+                if (!hash) {
+                    hash = elem[hashKey] = {};
+                }
+                return hash;
+            }
         },
-        {
-            'dup': 7,
-            'individual/one-version': 29
-        }
+        { 'individual/one-version': 16 }
     ],
-    28: [
+    15: [
         function (require, module, exports) {
-            arguments[4][8][0].apply(exports, arguments);
+            (function (global) {
+                'use strict';
+                /*global window, global*/
+                var root = typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : {};
+                module.exports = Individual;
+                function Individual(key, value) {
+                    if (key in root) {
+                        return root[key];
+                    }
+                    root[key] = value;
+                    return value;
+                }
+            }.call(this, typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : typeof window !== 'undefined' ? window : {}));
         },
-        { 'dup': 8 }
+        {}
     ],
-    29: [
+    16: [
         function (require, module, exports) {
-            arguments[4][9][0].apply(exports, arguments);
+            'use strict';
+            var Individual = require('./index.js');
+            module.exports = OneVersion;
+            function OneVersion(moduleName, version, defaultValue) {
+                var key = '__INDIVIDUAL_ONE_VERSION_' + moduleName;
+                var enforceKey = key + '_ENFORCE_SINGLETON';
+                var versionValue = Individual(enforceKey, version);
+                if (versionValue !== version) {
+                    throw new Error('Can only have one copy of ' + moduleName + '.\n' + 'You already have version ' + versionValue + ' installed.\n' + 'This means you cannot install version ' + version);
+                }
+                return Individual(key, defaultValue);
+            }
         },
-        {
-            './index.js': 28,
-            'dup': 9
-        }
+        { './index.js': 15 }
     ],
-    30: [
+    17: [
         function (require, module, exports) {
-            arguments[4][10][0].apply(exports, arguments);
+            (function (global) {
+                var topLevel = typeof global !== 'undefined' ? global : typeof window !== 'undefined' ? window : {};
+                var minDoc = require('min-document');
+                if (typeof document !== 'undefined') {
+                    module.exports = document;
+                } else {
+                    var doccy = topLevel['__GLOBAL_DOCUMENT_CACHE@4'];
+                    if (!doccy) {
+                        doccy = topLevel['__GLOBAL_DOCUMENT_CACHE@4'] = minDoc;
+                    }
+                    module.exports = doccy;
+                }
+            }.call(this, typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : typeof window !== 'undefined' ? window : {}));
         },
-        {
-            'dup': 10,
-            'min-document': 56
-        }
+        { 'min-document': 43 }
     ],
-    31: [
+    18: [
         function (require, module, exports) {
             'use strict';
             module.exports = function isObject(x) {
@@ -2152,7 +2056,7 @@
         },
         {}
     ],
-    32: [
+    19: [
         function (require, module, exports) {
             var nativeIsArray = Array.isArray;
             var toString = Object.prototype.toString;
@@ -2163,14 +2067,14 @@
         },
         {}
     ],
-    33: [
+    20: [
         function (require, module, exports) {
             var patch = require('./vdom/patch.js');
             module.exports = patch;
         },
-        { './vdom/patch.js': 38 }
+        { './vdom/patch.js': 25 }
     ],
-    34: [
+    21: [
         function (require, module, exports) {
             var isObject = require('is-object');
             var isHook = require('../vnode/is-vhook.js');
@@ -2254,11 +2158,11 @@
             }
         },
         {
-            '../vnode/is-vhook.js': 46,
-            'is-object': 31
+            '../vnode/is-vhook.js': 33,
+            'is-object': 18
         }
     ],
-    35: [
+    22: [
         function (require, module, exports) {
             var document = require('global/document');
             var applyProperties = require('./apply-properties');
@@ -2295,15 +2199,15 @@
             }
         },
         {
-            '../vnode/handle-thunk.js': 44,
-            '../vnode/is-vnode.js': 47,
-            '../vnode/is-vtext.js': 48,
-            '../vnode/is-widget.js': 49,
-            './apply-properties': 34,
-            'global/document': 30
+            '../vnode/handle-thunk.js': 31,
+            '../vnode/is-vnode.js': 34,
+            '../vnode/is-vtext.js': 35,
+            '../vnode/is-widget.js': 36,
+            './apply-properties': 21,
+            'global/document': 17
         }
     ],
-    36: [
+    23: [
         function (require, module, exports) {
             // Maps a virtual DOM tree onto a real DOM tree in an efficient manner.
             // We don't want to read all of the DOM nodes in the tree so we use
@@ -2373,7 +2277,7 @@
         },
         {}
     ],
-    37: [
+    24: [
         function (require, module, exports) {
             var applyProperties = require('./apply-properties');
             var isWidget = require('../vnode/is-widget.js');
@@ -2522,14 +2426,14 @@
             }
         },
         {
-            '../vnode/is-widget.js': 49,
-            '../vnode/vpatch.js': 52,
-            './apply-properties': 34,
-            './create-element': 35,
-            './update-widget': 39
+            '../vnode/is-widget.js': 36,
+            '../vnode/vpatch.js': 39,
+            './apply-properties': 21,
+            './create-element': 22,
+            './update-widget': 26
         }
     ],
-    38: [
+    25: [
         function (require, module, exports) {
             var document = require('global/document');
             var isArray = require('x-is-array');
@@ -2589,13 +2493,13 @@
             }
         },
         {
-            './dom-index': 36,
-            './patch-op': 37,
-            'global/document': 30,
-            'x-is-array': 32
+            './dom-index': 23,
+            './patch-op': 24,
+            'global/document': 17,
+            'x-is-array': 19
         }
     ],
-    39: [
+    26: [
         function (require, module, exports) {
             var isWidget = require('../vnode/is-widget.js');
             module.exports = updateWidget;
@@ -2610,9 +2514,9 @@
                 return false;
             }
         },
-        { '../vnode/is-widget.js': 49 }
+        { '../vnode/is-widget.js': 36 }
     ],
-    40: [
+    27: [
         function (require, module, exports) {
             'use strict';
             var EvStore = require('ev-store');
@@ -2634,9 +2538,9 @@
                 es[propName] = undefined;
             };
         },
-        { 'ev-store': 27 }
+        { 'ev-store': 14 }
     ],
-    41: [
+    28: [
         function (require, module, exports) {
             'use strict';
             module.exports = SoftSetHook;
@@ -2654,7 +2558,7 @@
         },
         {}
     ],
-    42: [
+    29: [
         function (require, module, exports) {
             'use strict';
             var isArray = require('x-is-array');
@@ -2760,20 +2664,20 @@
             }
         },
         {
-            '../vnode/is-thunk': 45,
-            '../vnode/is-vhook': 46,
-            '../vnode/is-vnode': 47,
-            '../vnode/is-vtext': 48,
-            '../vnode/is-widget': 49,
-            '../vnode/vnode.js': 51,
-            '../vnode/vtext.js': 53,
-            './hooks/ev-hook.js': 40,
-            './hooks/soft-set-hook.js': 41,
-            './parse-tag.js': 43,
-            'x-is-array': 32
+            '../vnode/is-thunk': 32,
+            '../vnode/is-vhook': 33,
+            '../vnode/is-vnode': 34,
+            '../vnode/is-vtext': 35,
+            '../vnode/is-widget': 36,
+            '../vnode/vnode.js': 38,
+            '../vnode/vtext.js': 40,
+            './hooks/ev-hook.js': 27,
+            './hooks/soft-set-hook.js': 28,
+            './parse-tag.js': 30,
+            'x-is-array': 19
         }
     ],
-    43: [
+    30: [
         function (require, module, exports) {
             'use strict';
             var split = require('browser-split');
@@ -2815,9 +2719,9 @@
                 return props.namespace ? tagName : tagName.toUpperCase();
             }
         },
-        { 'browser-split': 26 }
+        { 'browser-split': 13 }
     ],
-    44: [
+    31: [
         function (require, module, exports) {
             var isVNode = require('./is-vnode');
             var isVText = require('./is-vtext');
@@ -2850,13 +2754,13 @@
             }
         },
         {
-            './is-thunk': 45,
-            './is-vnode': 47,
-            './is-vtext': 48,
-            './is-widget': 49
+            './is-thunk': 32,
+            './is-vnode': 34,
+            './is-vtext': 35,
+            './is-widget': 36
         }
     ],
-    45: [
+    32: [
         function (require, module, exports) {
             module.exports = isThunk;
             function isThunk(t) {
@@ -2865,7 +2769,7 @@
         },
         {}
     ],
-    46: [
+    33: [
         function (require, module, exports) {
             module.exports = isHook;
             function isHook(hook) {
@@ -2874,7 +2778,7 @@
         },
         {}
     ],
-    47: [
+    34: [
         function (require, module, exports) {
             var version = require('./version');
             module.exports = isVirtualNode;
@@ -2882,9 +2786,9 @@
                 return x && x.type === 'VirtualNode' && x.version === version;
             }
         },
-        { './version': 50 }
+        { './version': 37 }
     ],
-    48: [
+    35: [
         function (require, module, exports) {
             var version = require('./version');
             module.exports = isVirtualText;
@@ -2892,9 +2796,9 @@
                 return x && x.type === 'VirtualText' && x.version === version;
             }
         },
-        { './version': 50 }
+        { './version': 37 }
     ],
-    49: [
+    36: [
         function (require, module, exports) {
             module.exports = isWidget;
             function isWidget(w) {
@@ -2903,13 +2807,13 @@
         },
         {}
     ],
-    50: [
+    37: [
         function (require, module, exports) {
             module.exports = '1';
         },
         {}
     ],
-    51: [
+    38: [
         function (require, module, exports) {
             var version = require('./version');
             var isVNode = require('./is-vnode');
@@ -2973,14 +2877,14 @@
             VirtualNode.prototype.type = 'VirtualNode';
         },
         {
-            './is-thunk': 45,
-            './is-vhook': 46,
-            './is-vnode': 47,
-            './is-widget': 49,
-            './version': 50
+            './is-thunk': 32,
+            './is-vhook': 33,
+            './is-vnode': 34,
+            './is-widget': 36,
+            './version': 37
         }
     ],
-    52: [
+    39: [
         function (require, module, exports) {
             var version = require('./version');
             VirtualPatch.NONE = 0;
@@ -3001,9 +2905,9 @@
             VirtualPatch.prototype.version = version;
             VirtualPatch.prototype.type = 'VirtualPatch';
         },
-        { './version': 50 }
+        { './version': 37 }
     ],
-    53: [
+    40: [
         function (require, module, exports) {
             var version = require('./version');
             module.exports = VirtualText;
@@ -3013,9 +2917,9 @@
             VirtualText.prototype.version = version;
             VirtualText.prototype.type = 'VirtualText';
         },
-        { './version': 50 }
+        { './version': 37 }
     ],
-    54: [
+    41: [
         function (require, module, exports) {
             var isObject = require('is-object');
             var isHook = require('../vnode/is-vhook');
@@ -3069,11 +2973,11 @@
             }
         },
         {
-            '../vnode/is-vhook': 46,
-            'is-object': 31
+            '../vnode/is-vhook': 33,
+            'is-object': 18
         }
     ],
-    55: [
+    42: [
         function (require, module, exports) {
             var isArray = require('x-is-array');
             var VPatch = require('../vnode/vpatch');
@@ -3337,17 +3241,17 @@
             }
         },
         {
-            '../vnode/handle-thunk': 44,
-            '../vnode/is-thunk': 45,
-            '../vnode/is-vnode': 47,
-            '../vnode/is-vtext': 48,
-            '../vnode/is-widget': 49,
-            '../vnode/vpatch': 52,
-            './diff-props': 54,
-            'x-is-array': 32
+            '../vnode/handle-thunk': 31,
+            '../vnode/is-thunk': 32,
+            '../vnode/is-vnode': 34,
+            '../vnode/is-vtext': 35,
+            '../vnode/is-widget': 36,
+            '../vnode/vpatch': 39,
+            './diff-props': 41,
+            'x-is-array': 19
         }
     ],
-    56: [
+    43: [
         function (require, module, exports) {
         },
         {}
